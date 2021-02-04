@@ -1,0 +1,93 @@
+#!/bin/bash -x
+
+sudo apt-get update
+
+echo "Install docker"
+curl -L https://get.docker.com | bash
+
+echo "Install docker-compose"
+sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+echo "Install rundeck"
+sudo mkdir -p /opt/rundeck
+sudo bash -c "cat<<EOF > /opt/rundeck/Dockerfile
+FROM rundeck/rundeck:3.3.4
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TERRAFORM_VERSION=0.13.6
+
+USER root
+
+# Ansible
+RUN apt-get update && \
+    apt-get install -y gcc python-dev libkrb5-dev && \
+    apt-get install python3-pip -y && \
+    pip3 install --upgrade pip && \
+    pip3 install --upgrade virtualenv && \
+    pip3 install pywinrm[kerberos] && \
+    apt install krb5-user -y && \ 
+    pip3 install pywinrm && \
+    pip3 install ansible
+
+RUN apt-get install -y git wget unzip
+
+# Terraform
+RUN cd /tmp && \
+    wget https://releases.hashicorp.com/terraform/0.13.6/terraform_0.13.6_linux_amd64.zip && \
+    unzip terraform_0.13.6_linux_amd64.zip -d /usr/bin 
+
+# Python2
+RUN apt install -y apt-utils && \
+    apt install -y python-pip && \
+    pip install gitpython==2.1.15
+
+# GCP SDK
+RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/google-cloud-sdk.zip -O /tmp/google-cloud-sdk.zip && \        
+    cd /usr/local && unzip /tmp/google-cloud-sdk.zip && \
+    google-cloud-sdk/install.sh --usage-reporting=false --path-update=true --bash-completion=true && \
+    google-cloud-sdk/bin/gcloud config set --installation component_manager/disable_update_check true && \
+    rm -rf /tmp/* 
+
+RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+EOF"
+
+sudo bash -c "cat<<EOF > /opt/rundeck/docker-compose.yml
+version: '3'
+
+services:
+    rundeck:
+        build:
+            context: .
+        container_name: rundeck
+        links:
+          - mysql
+        environment:
+            RUNDECK_DATABASE_DRIVER: org.mariadb.jdbc.Driver
+            RUNDECK_DATABASE_USERNAME: rundeck
+            RUNDECK_DATABASE_PASSWORD: rundeck
+            RUNDECK_DATABASE_URL: jdbc:mysql://mysql/rundeck?autoReconnect=true&useSSL=false
+        ports:
+          - 80:4440
+        volumes:
+          - /opt/rundeck/plugins:/home/rundeck/libext
+    mysql:
+        image: mysql:5.7
+        container_name: mysql
+        expose:
+          - 3306
+        environment:
+          - MYSQL_ROOT_PASSWORD=root
+          - MYSQL_DATABASE=rundeck
+          - MYSQL_USER=rundeck
+          - MYSQL_PASSWORD=rundeck
+        ports:
+          - 3306:3306
+        volumes:
+          - /opt/rundeck/mysql:/var/lib/mysql
+
+EOF"
+
+echo "Start docker compose"
+sudo docker-compose -f /opt/rundeck/docker-compose.yml up -d

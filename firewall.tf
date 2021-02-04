@@ -6,9 +6,9 @@ resource "google_compute_firewall" "allow-http" {
   network = google_compute_network.vpc.name
   allow {
     protocol = "tcp"
-    ports    = ["80"]
+    ports    = ["4440"]
   }
-  target_tags = ["http"]
+  target_tags = ["iap-rundeck"]
   source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
 }
 
@@ -20,5 +20,7 @@ resource "google_compute_firewall" "allow-ssh" {
     protocol = "tcp"
     ports    = ["22"]
   }
-  target_tags = ["ssh"]
+  target_tags = ["iap-ssh"]
+  source_ranges = ["35.235.240.0/20"]
+
 }

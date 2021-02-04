@@ -39,6 +39,11 @@ resource "google_compute_router_nat" "nat-gateway" {
   depends_on                         = [ google_compute_address.nat_ip ]
 }
 
+data "google_compute_zones" "available" {
+  region  = var.gcp_region_1
+  project = var.app_project
+}
+
 # show nat ip address
 output "nat_ip_address" {
   value = google_compute_address.nat_ip.address
